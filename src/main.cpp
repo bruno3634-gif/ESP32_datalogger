@@ -37,13 +37,27 @@ Adafruit_SSD1331 display = Adafruit_SSD1331(OLED_pin_cs_ss, OLED_pin_dc_rs, OLED
 
 unsigned long update_display = 0;
 
-
+unsigned long time_log = 0;
 
 int incomingsensor;
 int incomingdistance;
 float incomingbat;
 
 String success;
+
+
+esp_now_peer_info peer_info[3]; // estrutura para guardar dados dos outros ESP
+int count = 0;
+
+SoftwareSerial Serial_software(18, 19); // Pinos para comunicação serial
+TinyGPSPlus gps; // Inicializa o objeto TinyGPS++
+
+int satellites = 0;
+float decimalLatitude = 0.0;
+float decimalLongitude = 0.0;
+bool fix = false;
+
+
 
 uint8_t BROADCST_ADDRESS[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
@@ -71,8 +85,64 @@ void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status)
         success = "Delivery Fail :(";
     }
 }
+volatile boolean recording = false;
 
 struct_message incomingReadings;
+
+
+void start_recordings(){
+    if(recording == false){
+        SD.open("/data.csv", FILE_WRITE);
+        SD.end();
+        recording = true;
+    }
+    else{
+        recording = false;
+    }
+    
+
+    
+}
+
+int store_data(float latitude, float longitude, int distance, int sensor, float bat,int position){
+    if(recording == false){
+        return 0;
+    }
+    else{
+        File file = SD.open("/data.csv", FILE_APPEND);
+    if (!file) {
+        Serial.println("Failed to open file for writing");
+        return -1;
+    }
+    else{
+        unsigned long seconds = millis() / 1000;
+        unsigned long minutes = seconds / 60;
+        unsigned long hours = minutes / 60;
+
+        String time = String(hours) + ":" + String(minutes % 60) + ":" + String(seconds % 60);
+
+        file.print(time);
+        file.print(";");
+        file.print(latitude, 6);
+        file.print(";");
+        file.print(longitude, 6);
+        file.print(";");
+        file.print(position);
+        file.print(";");
+        file.print(distance);
+        file.print(";");
+        file.print(sensor);
+        file.print(";");
+        file.print(bat);
+        file.println();
+        file.close();
+        return 1;
+    }
+    }
+}
+
+
+
 
 void OnDataRecv(const uint8_t *mac, const uint8_t *incomingData, int len)
 {
@@ -85,18 +155,12 @@ void OnDataRecv(const uint8_t *mac, const uint8_t *incomingData, int len)
     Serial.println(incomingdistance);
     incomingbat = incomingReadings.position;
     Serial.println(incomingbat);
+    store_data(decimalLatitude, decimalLongitude, incomingdistance, incomingsensor, incomingbat, 1);
 }
 
-esp_now_peer_info peer_info[3]; // estrutura para guardar dados dos outros ESP
-int count = 0;
 
-SoftwareSerial Serial_software(18, 19); // Pinos para comunicação serial
-TinyGPSPlus gps; // Inicializa o objeto TinyGPS++
 
-int satellites = 0;
-float decimalLatitude = 0.0;
-float decimalLongitude = 0.0;
-bool fix = false;
+
 
 void setup()
 {
@@ -150,6 +214,10 @@ void setup()
     {
         Serial.println("Card Mount Success");
     }
+
+    //configure button interrupt
+    pinMode(4, INPUT_PULLUP);
+    attachInterrupt(4, start_recordings, FALLING);
 }
 
 void loop()
@@ -212,3 +280,6 @@ void loop()
         update_display = millis();
     }
 }
+
+
+
