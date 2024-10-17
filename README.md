@@ -4,7 +4,7 @@ The objective of this firmware is to receive messages by ESPNOW, and save them i
 
 Implemented:
 
-Receive ESPNOW messages 
+Receive ESPNOW messages \n
 Save files to the SD card
 Read coordinates from GPS
 GPS Data on screen
