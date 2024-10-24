@@ -23,4 +23,6 @@ To do:
 
 GPS state, Recording state on the screen
 
+Send sincronization signal
+
 Testing
