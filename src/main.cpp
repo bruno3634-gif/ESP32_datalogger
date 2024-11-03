@@ -14,6 +14,8 @@
 #define MISO_PIN 19
 #define SCK_PIN 18
 
+
+
 const uint16_t OLED_Color_Black = 0x0000;
 const uint16_t OLED_Color_Blue = 0x001F;
 const uint16_t OLED_Color_Red = 0xF800;
@@ -39,9 +41,16 @@ unsigned long update_display = 0;
 
 unsigned long time_log = 0;
 
-int incomingsensor;
-int incomingdistance;
-float incomingbat;
+unsigned long send_time = 0;
+unsigned long last_sent = 0;
+
+    float ax;
+    float ay;
+    float az;
+    float gx;
+    float gy;
+    float gz;
+    int tempo;
 
 String success;
 
@@ -61,14 +70,22 @@ bool fix = false;
 
 uint8_t BROADCST_ADDRESS[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
-typedef struct struct_dados
-{
-    int distance;
-    int sensor;
-    float position;
+
+
+
+typedef struct struct_message {
+  float ax;
+  float ay;
+  float az;
+  float gx;
+  float gy;
+  float gz;
+  int tempo;
 } struct_message;
 
-struct_dados incoming_readings;
+
+
+struct_message incoming_readings;
 
 #define TFT_GRAY 0xBDF7
 
@@ -104,7 +121,7 @@ void start_recordings(){
     
 }
 
-int store_data(float latitude, float longitude, int distance, int sensor, float bat,int position){
+int store_data(float latitude, float longitude){
     if(recording == false){
         return 0;
     }
@@ -115,11 +132,7 @@ int store_data(float latitude, float longitude, int distance, int sensor, float 
         return -1;
     }
     else{
-        unsigned long seconds = millis() / 1000;
-        unsigned long minutes = seconds / 60;
-        unsigned long hours = minutes / 60;
-
-        String time = String(hours) + ":" + String(minutes % 60) + ":" + String(seconds % 60);
+        unsigned long time = last_sent + tempo;
 
         file.print(time);
         file.print(";");
@@ -127,13 +140,17 @@ int store_data(float latitude, float longitude, int distance, int sensor, float 
         file.print(";");
         file.print(longitude, 6);
         file.print(";");
-        file.print(position);
+        file.print(ax);
         file.print(";");
-        file.print(distance);
+        file.print(ay);
         file.print(";");
-        file.print(sensor);
+        file.print(az);
         file.print(";");
-        file.print(bat);
+        file.print(gx);
+        file.print(";");
+        file.print(gy);
+        file.print(";");
+        file.print(gz);
         file.println();
         file.close();
         return 1;
@@ -149,13 +166,15 @@ void OnDataRecv(const uint8_t *mac, const uint8_t *incomingData, int len)
     memcpy(&incomingReadings, incomingData, sizeof(incomingReadings));
     Serial.print("Bytes received: ");
     Serial.println(len);
-    incomingsensor = incomingReadings.sensor;
-    Serial.println(incomingsensor);
-    incomingdistance = incomingReadings.distance;
-    Serial.println(incomingdistance);
-    incomingbat = incomingReadings.position;
-    Serial.println(incomingbat);
-    store_data(decimalLatitude, decimalLongitude, incomingdistance, incomingsensor, incomingbat, 1);
+    ax = incoming_readings.ax;
+    ay = incoming_readings.ay;
+    az = incoming_readings.az;
+    gx = incoming_readings.gx;
+    gy = incoming_readings.gy;
+    gz = incoming_readings.gz;
+    tempo = incoming_readings.tempo;
+ 
+    store_data(decimalLatitude, decimalLongitude);
 }
 
 
@@ -218,11 +237,33 @@ void setup()
     //configure button interrupt
     pinMode(4, INPUT_PULLUP);
     attachInterrupt(4, start_recordings, FALLING);
+     // Register peer
+    esp_now_peer_info_t peerInfo;
+    memset(&peerInfo, 0, sizeof(peerInfo));
+    memcpy(peerInfo.peer_addr, BROADCST_ADDRESS, 6);
+    peerInfo.channel = 0;
+    peerInfo.encrypt = false;
+
+    // Add peer
+    if (esp_now_add_peer(&peerInfo) != ESP_OK) {
+        Serial.println("Failed to add peer");
+        return;
+    }
+    Serial.println("Peer added successfully");
 }
 
 void loop()
 {
-   
+    if(millis()-send_time >= 30){
+        int i = 16;
+        if (esp_now_send(BROADCST_ADDRESS, (uint8_t *) &i, sizeof(i)) == ESP_NOW_SEND_SUCCESS) {
+        last_sent = millis();
+        } else {
+            Serial.println("Failed");
+        }
+        send_time = millis();
+    }
+    
 
     while (Serial_software.available() > 0)
     {
