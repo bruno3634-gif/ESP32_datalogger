@@ -109,7 +109,7 @@ struct_message incomingReadings;
 
 void start_recordings(){
     if(recording == false){
-        SD.open("/data.csv", FILE_WRITE);
+        SD.open("/data_log.csv", FILE_WRITE);
         SD.end();
         recording = true;
     }
@@ -254,7 +254,7 @@ void setup()
 
 void loop()
 {
-    if(millis()-send_time >= 30){
+    if(millis()-send_time >= 30 && recording == true){
         int i = 16;
         if (esp_now_send(BROADCST_ADDRESS, (uint8_t *) &i, sizeof(i)) == ESP_NOW_SEND_SUCCESS) {
         last_sent = millis();
